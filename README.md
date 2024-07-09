@@ -8,11 +8,6 @@ Decimal: 18\
 Max Supply: 100,000,000,000\
 Swap Date: TBA
 
-Sketch Contract Address:\
-0xAbBAc89b664D9c04a6b810e163B96271A93B6F69
-
-View on Polyscan\
-https://polygonscan.com/token/0xAbBAc89b664D9c04a6b810e163B96271A93B6F69
 
 Please, visit the project website for more information\
 https://sketchproject.io/
