@@ -44,7 +44,7 @@ contract Sketch is
     mapping(address => BKU) private _voucher;
 
     mapping(address => mapping(address => uint256)) private _allowances;
-
+ 
     mapping(address => uint256) private _balances;
  
     mapping(address => uint256) private _blacklist;
@@ -65,8 +65,6 @@ contract Sketch is
 
     string private _symbol;
 
-    uint256 private _minterRoleCount;
-
     constructor(
         address ceoRole, 
         address cfoRole, 
@@ -85,8 +83,6 @@ contract Sketch is
         _balances[cfoRole] = _totalSupply;
 
         _lastMintedTime = block.timestamp;
-
-        _minterRoleCount = 0;
     }
 
     function _settlerExists(address payer, address settler) internal view returns (bool) {
@@ -132,6 +128,9 @@ contract Sketch is
         // prevent self fund-distribution
         require(ms != recipient);
         
+        // Certik: SKE-02 Fix
+        require(0 == blacklistedTime(ms));
+
         _voucher[ms].balance += amount;
         _voucher[ms].ledger[recipient] += amount;
         
@@ -152,6 +151,9 @@ contract Sketch is
 
         require(0 == blacklistedTime(payer));
 
+        // Certik: SKE-02 Fix
+        require(0 == blacklistedTime(settler));
+
         require(address(0) != payer);
         require(address(0) != settler);
 
@@ -159,10 +161,11 @@ contract Sketch is
         bool isValidSettler = _settlerExists(payer, settler);
         require(isValidSettler);
 
-        uint256 eligibleAmount = _voucher[payer].balance;
 
+        // Certik: [SKE-01] optimization
+        // uint256 eligibleAmount = _voucher[payer].balance;
         // check total balance
-        require(eligibleAmount >= amount);
+        // require(eligibleAmount >= amount);
 
         // check balance for each recipient
         uint256 availableFundsForSettler = _voucher[payer].ledger[settler];
@@ -187,6 +190,9 @@ contract Sketch is
 
         address settler = _msgSender();
 
+        require(0 == blacklistedTime(payer));
+        
+        // Certik: SKE-02 Fix
         require(0 == blacklistedTime(settler));
 
         require(address(0) != payer);
@@ -195,9 +201,10 @@ contract Sketch is
         bool isValidSettler = _settlerExists(payer, settler);
         require(isValidSettler);
 
+        // Certik: [SKE-01] Optimization
         // check total balance
-        uint256 eligibleAmount = _voucher[payer].balance;
-        require(eligibleAmount >= amount);
+        // uint256 eligibleAmount = _voucher[payer].balance;
+        // require(eligibleAmount >= amount);
 
         // check balance for each recipient
         uint256 availableFundsForSettler = _voucher[payer].ledger[settler];
@@ -280,19 +287,7 @@ contract Sketch is
         // we can't allow blacklisted account to hold any role
         require(0 == blacklistedTime(account));
 
-        // Max minter is two (2)
-        if(role == MINTER_ROLE) {
-            require(2 > _minterRoleCount);
-
-            super._grantRole(role, account);
-
-            // inc on no error
-            _minterRoleCount++;
-
-        } else {
-            super._grantRole(role, account);
-        }
-
+        super._grantRole(role, account);
     }
 
     /**
@@ -311,10 +306,6 @@ contract Sketch is
     onlyRole(CEO_ROLE) {
 
         super._revokeRole(role, account);
-
-        if(role == MINTER_ROLE) {
-            _minterRoleCount--;
-        }
     }
 
 
@@ -343,7 +334,8 @@ contract Sketch is
             return true;
         }
 
-        emit BlacklistedAddressAdded(addr, 0);
+        // Certik: [SKE-09] fix
+        emit BlacklistedAddressAdded(addr, _blacklist[addr]);
         return false;
     }
 
@@ -485,6 +477,8 @@ contract Sketch is
     }
 
     /**
+     * Includes Certik: [SKE-08] fix
+     * 
      * @dev Atomically increases the allowance granted to `spender` by the caller.
      *
      * This is an alternative to {approve} that can be used as a mitigation for
@@ -497,13 +491,17 @@ contract Sketch is
      * - `spender` cannot be the zero address.
      */
     function increaseAllowance(address spender, uint256 addedValue) 
+    whenNotPaused
     public virtual returns (bool) {
         address owner = _msgSender();
         _approve(owner, spender, allowance(owner, spender) + addedValue);
+
         return true;
     }
 
     /**
+     * Includes Certik: [SKE-08] fix
+     * 
      * @dev Atomically decreases the allowance granted to `spender` by the caller.
      *
      * This is an alternative to {approve} that can be used as a mitigation for
@@ -516,8 +514,10 @@ contract Sketch is
      * - `spender` cannot be the zero address.
      * - `spender` must have allowance for the caller of at least
      * `subtractedValue`.
+     * 
      */
-    function decreaseAllowance(address spender, uint256 subtractedValue) 
+    function decreaseAllowance(address spender, uint256 subtractedValue)
+    whenNotPaused 
     public virtual returns (bool) {
         address owner = _msgSender();
         uint256 currentAllowance = allowance(owner, spender);
